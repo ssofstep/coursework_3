@@ -59,6 +59,3 @@ class HH(Parser):
             self.__params["page"] += 1
 
 
-HH_ = HH()
-HH_.load_vacancies("pyhton", 1)
-print(*HH_.vacancies, sep="\n")

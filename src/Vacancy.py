@@ -66,7 +66,7 @@ class Vacancy:
             requirement = requirement.get("requirement")
         employer_name = data.get('employer')
         if employer_name is not None:
-            employer_name = requirement.get("name")
+            employer_name = employer_name.get("name")
         return cls(
             name=data.get("name", "NotFound"),
             link=data.get("alternate_url", "error"),

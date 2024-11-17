@@ -2,6 +2,8 @@ import psycopg2
 
 from src.Vacancy import Vacancy
 from config.config import config
+from src.hh_info import HH
+from psycopg2.extensions import connection, cursor
 
 
 class DBManager:
@@ -28,7 +30,7 @@ class DBManager:
             cur.execute("""
                            CREATE TABLE IF NOT EXISTS employers (
                                id SERIAL PRIMARY KEY,
-                               employer_name TEXT NOT NULL UNIQUE
+                               employer_name VARCHAR(255) NOT NULL UNIQUE
                            )
                        """)
 
@@ -58,19 +60,24 @@ class DBManager:
         )
         return cur.fetchone()[0]
 
-    def add_vacancies(self, data: list[Vacancy]):
+    def add_employer(self, employer_name: str, conn: connection, cur: cursor) -> int:
+        """Метод добавления работодателей"""
+        cur.execute(
+            f"""
+            INSERT INTO employers (employer_name)
+            VALUES ('{employer_name}')
+            RETURNING *
+            """)
+        conn.commit()
+        return cur.fetchone()[0]
+
+    def add_vacancies(self, data: list[Vacancy]) -> None:
         """Метод добавления вакансий в БД"""
         conn = psycopg2.connect(dbname=self.database_name, **self.params)
         cur = conn.cursor()
         for vacancy in data:
             if not self.in_employers(vacancy.employer_name):
-                cur.execute(
-                    """
-                    INSERT INTO employers (employer_name)
-                    VALUES (%s)
-                    RETURNING *
-                    """, vacancy.employer_name)
-                id_ = cur.fetchone()[0]
+                id_ = self.add_employer(vacancy.employer_name, conn, cur)
             else:
                 cur.execute(
                     f"""
@@ -88,12 +95,79 @@ class DBManager:
         conn.commit()
         conn.close()
 
+    def get_companies_and_vacancies_count(self) -> list:
+        """Метод, который получает список всех компаний и количество вакансий у каждой компании."""
+        conn = psycopg2.connect(dbname=self.database_name, **self.params)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT employer_name, COUNT(*) FROM vacancies
+            INNER JOIN employers ON vacancies.employer_id = employers.id
+            GROUP BY employer_name
+            """
+        )
+
+        return cur.fetchall()
+
+    def get_all_vacancies(self) -> list:
+        """Методо, который получает список всех вакансий с указанием названия компании, названия
+        вакансии и зарплаты и ссылки на вакансию."""
+        conn = psycopg2.connect(dbname=self.database_name, **self.params)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT employer_name, name, salary, link FROM vacancies
+            INNER JOIN employers ON vacancies.employer_id = employers.id
+            """
+        )
+
+        return cur.fetchall()
+
+
+    def get_avg_salary(self) -> float:
+        """Метод, который получает среднюю зарплату по вакансиям."""
+        conn = psycopg2.connect(dbname=self.database_name, **self.params)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT AVG(salary) FROM vacancies
+            """
+        )
+
+        return cur.fetchone()[0]
+
+
+    def get_vacancies_with_higher_salary(self) -> list:
+        """Метод, который получает список всех вакансий, у которых зарплата выше средней по всем вакансиям."""
+        conn = psycopg2.connect(dbname=self.database_name, **self.params)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT * FROM vacancies WHERE salary > (SELECT AVG(salary) FROM vacancies)
+            """
+        )
+
+        return cur.fetchall()
+
+
+    def get_vacancies_with_keyword(self, word: str) -> list:
+        """Метод получает список всех вакансий, в названии, которых содержатся
+        переданные в метод слова, например python."""
+        conn = psycopg2.connect(dbname=self.database_name, **self.params)
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            SELECT * FROM vacancies
+            WHERE name LIKE '%{word}%'
+            """
+        )
+
+        return cur.fetchall()
+
 
 params = {"host": "localhost",
           "user": "postgres",
           "password": "7627",
           "port": "5432"}
-bd_name = "python"
-db = DBManager(bd_name, params)
-db.add_vacancies([Vacancy("df", "sdf", 0, "sdf", "d"),
-                  Vacancy("dfs", "sdf", 0, "fdg", "gf")])
+
+
